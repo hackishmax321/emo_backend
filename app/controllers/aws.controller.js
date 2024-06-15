@@ -82,170 +82,153 @@ exports.doUpload = (req, res) => {
   //   });
   if (req.body.req_type == "video") {
     s3Client.upload(params, async (err, data) => {
-      if (err) {
-        console.log(err);
-        console.log("====================================");
-        console.log(data);
-        console.log("====================================");
-        return res.status(500).json({ error: "Error -> " + err });
-      }
-
-      if (data) {
-        let videoURL = data.Location;
-
-        //  add
-
-        await axios
-          .post(process.env.FLASKBACKEND + `/predict/video`, {
-            url: data.Location,
-          })
-          .then(async (flaskRes) => {
-            console.log("==========Flask Response is============");
-            console.log(flaskRes.data[0].auido_prediction);
-            console.log("====================================");
-            console.log("video below");
-            console.log("====================================");
-
-            console.log(flaskRes.data[0].video_frames_prediction);
-            console.log("====================================");
-            console.log(flaskRes.data[0]);
-            // update obj
-
-            let anger = 0;
-            let fear = 0;
-            let neutral = 0;
-            let sad = 0;
-            let happy = 0;
-            let calm = 0;
-            let disgust = 0;
-            let surprise = 0;
-            let smile = 0;
-
-            let audioData;
-
-            if (flaskRes.data[0].video_frames_prediction) {
-              for (
-                let index = 0;
-                index < flaskRes.data[0].video_frames_prediction.length;
-                index++
-              ) {
-                const element = flaskRes.data[0].video_frames_prediction[index];
-
-                if (element.class.toUpperCase() == "Anger".toUpperCase()) {
-                  anger = element.average_probability;
-                }
-                if (element.class.toUpperCase() == "Fear".toUpperCase()) {
-                  fear = element.average_probability;
-                }
-                if (element.class.toUpperCase() == "Neutral".toUpperCase()) {
-                  neutral = element.average_probability;
-                }
-                if (element.class.toUpperCase() == "Sad".toUpperCase()) {
-                  sad = element.average_probability;
-                }
-
-                if (element.class.toUpperCase() == "smile".toUpperCase()) {
-                  smile = element.average_probability;
-                }
-                if (element.class.toUpperCase() == "Surprise".toUpperCase()) {
-                  surprise = element.average_probability;
-                }
-              }
-            }
-
-            const newDetectionvideo = new videoDetection({
-              user_Id,
-              videoURL,
-              anger: anger,
-              fear: fear,
-              neutral: neutral,
-              sad: sad,
-              smile: smile,
-
-              surprise: surprise,
-              submissionId,
-            });
-
-            await newDetectionvideo
-              .save()
-              .then((savedObj) => {
-                audioData = savedObj;
-              })
-              .catch((err) => {
-                console.log(err);
-                return res.status(400).json("Erro " + err);
-              });
-
-            anger = 0;
-            fear = 0;
-            neutral = 0;
-            sad = 0;
-            happy = 0;
-            calm = 0;
-            disgust = 0;
-            surprise = 0;
-
-            let element = flaskRes.data[0].auido_prediction;
-            if (element) {
-              if (element.class.toUpperCase() == "anger".toUpperCase()) {
-                anger = element.probability;
-              }
-              if (element.class.toUpperCase() == "fear".toUpperCase()) {
-                fear = element.probability;
-              }
-              if (element.class.toUpperCase() == "neutral".toUpperCase()) {
-                neutral = element.probability;
-              }
-              if (element.class.toUpperCase() == "sad".toUpperCase()) {
-                sad = element.probability;
-              }
-              if (element.class.toUpperCase() == "happy".toUpperCase()) {
-                happy = element.probability;
-              }
-              if (element.class.toUpperCase() == "calm".toUpperCase()) {
-                calm = element.probability;
-              }
-              if (element.class.toUpperCase() == "disgust".toUpperCase()) {
-                disgust = element.probability;
-              }
-              if (element.class.toUpperCase() == "surprise".toUpperCase()) {
-                surprise = element.probability;
-              }
-            }
-            const newDetection = new audioDetection({
-              user_Id,
-              videoURL,
-              anger: anger,
-              fear: fear,
-              neutral: neutral,
-              sad: sad,
-              calm: calm,
-              disgust: disgust,
-              happy: happy,
-              surprise: surprise,
-              submissionId,
-            });
-
-            await newDetection
-              .save()
-              .then((savedObj) => {
-		console.log({ audioResult: savedObj, videoResult: audioData });
-                return res
-                  .status(200)
-                  .json({ audioResult: savedObj, videoResult: audioData });
-              })
-              .catch((err) => {
-                console.log(err);
-                return res.status(400).json("Erro " + err);
-              });
-          })
-          .catch((err) => {
+        if (err) {
             console.log(err);
-            return res.status(400).json("Erro " + err);
-          });
-      }
+            console.log("====================================");
+            console.log(data);
+            console.log("====================================");
+            return res.status(500).json({ error: "Error -> " + err });
+        }
+
+        if (data) {
+            let videoURL = data.Location;
+
+            await axios
+                .post(process.env.FLASKBACKEND + `/predict/video`, {
+                    url: data.Location,
+                })
+                .then(async (flaskRes) => {
+                    let flaskData = flaskRes.data;
+
+                    // Initialize emotion counters
+                    let emotions = {
+                        anger: 0,
+                        fear: 0,
+                        neutral: 0,
+                        sad: 0,
+                        happy: 0,
+                        calm: 0,
+                        disgust: 0,
+                        surprise: 0,
+                        smile: 0,
+                    };
+
+                    // Initialize emotion counts
+                    let emotionCounts = {
+                        anger: 0,
+                        fear: 0,
+                        neutral: 0,
+                        sad: 0,
+                        happy: 0,
+                        calm: 0,
+                        disgust: 0,
+                        surprise: 0,
+                        smile: 0,
+                    };
+
+                    // Process video frame predictions
+                    if (flaskData) {
+                        flaskData.forEach((prediction) => {
+                            let videoPrediction = prediction.video_frames_prediction;
+                            if (videoPrediction) {
+                                if (videoPrediction.class) {
+                                    let emotionClass = videoPrediction.class.toLowerCase();
+                                    if (emotions[emotionClass] !== undefined) {
+                                        emotions[emotionClass] += videoPrediction.probability;
+                                        emotionCounts[emotionClass] += 1;
+                                    }
+                                }
+                            }
+
+                            let audioPrediction = prediction.audio_prediction;
+                            if (audioPrediction) {
+                                let emotionClass = audioPrediction.class.toLowerCase();
+                                if (emotions[emotionClass] !== undefined) {
+                                    emotions[emotionClass] += audioPrediction.probability;
+                                    emotionCounts[emotionClass] += 1;
+                                }
+                            }
+                        });
+                    }
+
+                    // Calculate averages
+                    for (let emotion in emotions) {
+                        if (emotionCounts[emotion] > 0) {
+                            emotions[emotion] = emotions[emotion] / emotionCounts[emotion];
+                        } else {
+                            emotions[emotion] = 0;
+                        }
+                    }
+
+                    // Prepare data to save
+                    const newDetectionvideo = new videoDetection({
+                        user_Id,
+                        videoURL,
+                        anger: emotions.anger,
+                        fear: emotions.fear,
+                        neutral: emotions.neutral,
+                        sad: emotions.sad,
+                        smile: emotions.smile,
+                        surprise: emotions.surprise,
+                        submissionId,
+                    });
+
+                    let audioData;
+                    await newDetectionvideo.save()
+                        .then((savedObj) => {
+                            audioData = savedObj;
+                        })
+                        .catch((err) => {
+                            console.log(err);
+                            return res.status(400).json("Error " + err);
+                        });
+
+                    // Reset emotions for audio detection
+                    for (let emotion in emotions) {
+                        emotions[emotion] = 0;
+                    }
+
+                    // Process the single audio prediction again (assuming the structure of the received data)
+                    let element = flaskData[0].audio_prediction;
+                    if (element) {
+                        let emotionClass = element.class.toLowerCase();
+                        if (emotions[emotionClass] !== undefined) {
+                            emotions[emotionClass] = element.probability;
+                        }
+                    }
+
+                    const newDetection = new audioDetection({
+                        user_Id,
+                        videoURL,
+                        anger: emotions.anger,
+                        fear: emotions.fear,
+                        neutral: emotions.neutral,
+                        sad: emotions.sad,
+                        calm: emotions.calm,
+                        disgust: emotions.disgust,
+                        happy: emotions.happy,
+                        surprise: emotions.surprise,
+                        submissionId,
+                    });
+
+                    await newDetection.save()
+                        .then((savedObj) => {
+                            console.log({ audioResult: savedObj, videoResult: audioData });
+                            return res.status(200).json({ audioResult: savedObj, videoResult: audioData });
+                        })
+                        .catch((err) => {
+                            console.log(err);
+                            return res.status(400).json("Error " + err);
+                        });
+                })
+                .catch((err) => {
+                    console.log(err);
+                    return res.status(400).json("Error " + err);
+                });
+        }
     });
-  } else {
+}
+ else {
     s3Client.upload(params, async (err, data) => {
       if (err) {
         console.log(err);
